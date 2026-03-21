@@ -1,0 +1,93 @@
+---
+title: "Комплексное исследование Daisyworld: Параметры и Светимость"
+author: "Виктория"
+date: 2026-03-20
+format: html
+engine: julia
+---
+
+# Анализ устойчивости системы при вариации параметров
+
+В данном эксперименте мы объединяем два мощных метода анализа:
+1. **Сценарий `:ramp`**: Постепенное увеличение светимости солнца.
+2. **Параметрический поиск**: Сравнение различных комбинаций максимального возраста маргариток (`max_age`) и их начальной плотности (`init_white`).
+
+## 1. Подготовка экспериментальной базы
+
+Мы используем пакет `DrWatson` для генерации всех возможных комбинаций параметров из словаря `param_dict`.
+
+```{julia}
+using DrWatson
+@quickactivate "project"
+using Agents, DataFrames, CairoMakie, StatsBase
+
+# Подключаем логику модели
+include(srcdir("daisyworld.jl"))
+
+# Функции сбора данных
+black(a) = a.breed == :black
+white(a) = a.breed == :white
+adata = [(black, count), (white, count)]
+
+# Параметры для исследования
+param_dict = Dict(
+    :griddims => (30, 30),
+    :max_age => [25, 40],
+    :init_white => [0.2, 0.8],
+    :init_black => 0.2,
+    :albedo_white => 0.75,
+    :albedo_black => 0.25,
+    :surface_albedo => 0.4,
+    :solar_change => 0.005,
+    :solar_luminosity => 1.0,
+    :scenario => :ramp,
+    :seed => 165,
+)
+
+params_list = dict_list(param_dict)
+println("Запланировано экспериментов: ", length(params_list))
+```
+
+## 2. Цикл симуляций и построение графиков
+
+Для каждой конфигурации мы запускаем модель на 1000 шагов и строим трехпанельный график, отражающий численность популяций, среднюю температуру и светимость.
+
+```{julia}
+for params in params_list
+    # Инициализация модели с текущим набором параметров
+    model = daisyworld(;params...)
+
+    # Настройка сбора данных модели
+    temperature(model) = StatsBase.mean(model.temperature)
+    mdata = [temperature, :solar_luminosity]
+
+    # Сбор данных за 1000 шагов
+    agent_df, model_df = run!(model, 1000; adata = adata, mdata = mdata)
+
+    # Создание фигуры
+    figure = CairoMakie.Figure(size = (600, 700))
+    
+    # Панель 1: Численность маргариток
+    ax1 = Axis(figure[1, 1], ylabel = "Кол-во", title = "Параметры: max_age=$(params[:max_age]), init_w=$(params[:init_white])")
+    blackl = lines!(ax1, agent_df[!, :time], agent_df[!, :count_black], color = :black)
+    whitel = lines!(ax1, agent_df[!, :time], agent_df[!, :count_white], color = :blue)
+    Legend(figure[1, 2], [blackl, whitel], ["Черные", "Белые"])
+
+    # Панель 2: Температура
+    ax2 = Axis(figure[2, 1], ylabel = "Температура")
+    lines!(ax2, model_df[!, :time], model_df[!, :temperature], color = :red)
+
+    # Панель 3: Светимость
+    ax3 = Axis(figure[3, 1], xlabel = "Шаги (ticks)", ylabel = "Светимость")
+    lines!(ax3, model_df[!, :time], model_df[!, :solar_luminosity], color = :orange)
+
+    # Убираем лишние метки времени на верхних графиках
+    for ax in (ax1, ax2); ax.xticklabelsvisible = false; end
+
+    # Сохранение с автоматическим именем файла
+    plt_name = savename("daisy-luminosity", params, "png")
+    save(plotsdir(plt_name), figure)
+end
+
+println("Все графики успешно сохранены в папку plots/")
+```

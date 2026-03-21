@@ -1,0 +1,86 @@
+---
+title: "Серийные эксперименты в модели Daisyworld"
+author: "Виктория"
+format: html
+engine: julia
+---
+
+# Исследование пространства параметров
+
+В данном разделе мы проводим серию экспериментов, варьируя максимальный возраст маргариток (`max_age`) и начальную плотность белых маргариток (`init_white`). Для автоматизации процесса и именования файлов используются инструменты пакета `DrWatson`.
+
+## 1. Настройка окружения и параметров
+
+Мы создаем словарь параметров `param_dict`. Использование векторов в значениях ключей (например, `[25, 40]`) позволяет функции `dict_list` создать список всех возможных комбинаций условий.
+
+```{julia}
+using DrWatson
+@quickactivate "project"
+using Agents, DataFrames, CairoMakie
+
+# Подключаем модель
+include(srcdir("daisyworld.jl"))
+
+# Определяем пространство параметров
+param_dict = Dict(
+    :griddims => (30, 30),
+    :max_age => [25, 40],        # Исследуем разную продолжительность жизни
+    :init_white => [0.2, 0.8],    # Разная начальная доля белых маргариток
+    :init_black => 0.2,
+    :albedo_white => 0.75,
+    :albedo_black => 0.25,
+    :surface_albedo => 0.4,
+    :solar_change => 0.005,
+    :solar_luminosity => 1.0,
+    :scenario => :default,
+    :seed => 165,
+)
+
+# Генерируем список комбинаций
+params_list = dict_list(param_dict)
+println("Всего будет проведено экспериментов: ", length(params_list))
+```
+
+## 2. Цикл проведения экспериментов
+
+Для каждой комбинации параметров мы создаем модель, фиксируем её состояние на разных этапах времени и сохраняем графики. Имена файлов формируются автоматически на основе значений параметров.
+
+```{julia}
+for params in params_list
+    # Инициализация модели с конкретным набором параметров
+    model = daisyworld(;params...)
+    
+    daisycolor(a::Daisy) = a.breed
+    plotkwargs = (
+        agent_color=daisycolor,
+        agent_size = 20,
+        agent_marker = '✿',
+        heatarray = :temperature,
+        heatkwargs = (colorrange = (-20, 60),),
+    )
+
+    # Визуализация шага 1
+    plt1, _ = abmplot(model; plotkwargs...)
+
+    # Визуализация шага 5
+    step!(model, 5)
+    plt2, _ = abmplot(model; heatarray = model.temperature, plotkwargs...)
+
+    # Визуализация шага 45 (40 дополнительных шагов)
+    step!(model, 40)
+    plt3, _ = abmplot(model; heatarray = model.temperature, plotkwargs...)
+
+    # Генерация уникальных имен файлов с помощью savename
+    # savename автоматически создаст строку вида "max_age=25_init_white=0.2..."
+    plt1_name = savename("daisyworld", params, "png") |> x -> replace(x, ".png" => "_step01.png")
+    plt2_name = savename("daisyworld", params, "png") |> x -> replace(x, ".png" => "_step05.png")
+    plt3_name = savename("daisyworld", params, "png") |> x -> replace(x, ".png" => "_step45.png")
+
+    # Сохранение результатов
+    save(plotsdir(plt1_name), plt1)
+    save(plotsdir(plt2_name), plt2)
+    save(plotsdir(plt3_name), plt3)
+end
+
+println("Все эксперименты завершены, графики сохранены в папку plots/")
+```

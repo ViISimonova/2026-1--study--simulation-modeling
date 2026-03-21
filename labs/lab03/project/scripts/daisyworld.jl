@@ -1,0 +1,65 @@
+---
+title: "Лабораторная работа №3: Моделирование системы Daisyworld"
+author: "Виктория"
+date: 2026-03-20
+format: html
+---
+
+В данном разделе мы исследуем динамику популяции черных и белых маргариток и их влияние на температуру поверхности планеты.
+
+# 1. Подготовка окружения
+Активируем проект и загружаем необходимые библиотеки для работы с агентами (Agents.jl) и графикой (CairoMakie).
+
+```{julia}
+using DrWatson
+@quickactivate "project"
+using Agents
+using DataFrames
+using Plots
+using CairoMakie
+
+include(srcdir("daisyworld.jl"))
+```
+
+# 2. Инициализация и настройка визуализации
+Создаем экземпляр модели и определяем параметры отображения: цвет маргариток будет зависеть от их вида, а в качестве маркера используем символ цветка ✿.
+
+```{julia}
+model = daisyworld()
+daisycolor(a::Daisy) = a.breed
+
+plotkwargs = (
+    agent_color=daisycolor,
+    agent_size = 20,
+    agent_marker = '✿',
+    heatarray = :temperature,
+    heatkwargs = (colorrange = (-20, 60),),
+)
+```
+
+# 3. Запуск симуляции и фиксация состояний
+Мы визуализируем состояние системы на разных этапах времени, чтобы увидеть, как меняется температура поверхности.
+
+```{julia}
+
+plt1, _ = abmplot(model; plotkwargs...)
+
+step!(model, 5)
+plt2, _ = abmplot(model; heatarray = model.temperature, plotkwargs...)
+
+step!(model, 40)
+plt3, _ = abmplot(model; heatarray = model.temperature, plotkwargs...)
+```
+
+# 4. Экспорт результатов
+Сохраняем полученные графики в папку `plots` для последующего включения в отчет.
+
+```{julia}
+save(plotsdir("daisy_step001.png"), plt1)
+save(plotsdir("daisy_step005.png"), plt2)
+save(plotsdir("daisy_step040.png"), plt3)
+
+println("Визуализация завершена успешно. Файлы сохранены!")
+```
+
+# This file was generated using Literate.jl, https://github.com/fredrikekre/Literate.jl

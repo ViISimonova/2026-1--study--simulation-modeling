@@ -1,0 +1,83 @@
+---
+title: "Влияние изменения светимости Солнца на Daisyworld"
+author: "Виктория"
+format: html
+engine: julia
+---
+
+# Исследование выживаемости при изменении светимости
+
+В этом эксперименте мы используем сценарий `:ramp`, при котором солнечная светимость постепенно изменяется. Мы проследим, как популяции маргариток адаптируются к этим изменениям и пытаются стабилизировать среднюю температуру планеты.
+
+## 1. Инициализация и настройка сбора данных
+
+Подключаем необходимые пакеты и определяем метрики для мониторинга: количество агентов и среднюю температуру поверхности.
+
+```{julia}
+using DrWatson
+@quickactivate "project"
+using Agents, DataFrames, CairoMakie, StatsBase
+
+# Загружаем правила мира
+include(srcdir("daisyworld.jl"))
+
+# Метрики для агентов (подсчет популяции)
+black(a) = a.breed == :black
+white(a) = a.breed == :white
+adata = [(black, count), (white, count)]
+
+# Метрики модели (средняя температура и текущая светимость)
+temperature(model) = StatsBase.mean(model.temperature)
+mdata = [temperature, :solar_luminosity]
+
+# Создаем модель со сценарием постепенного изменения светимости
+model = daisyworld(solar_luminosity = 1.0, scenario = :ramp)
+```
+
+## 2. Запуск симуляции
+
+Запускаем модель на 1000 шагов. Благодаря параметру `mdata`, мы получим подробную историю изменения климата планеты.
+
+```{julia}
+agent_df, model_df = run!(model, 1000; adata = adata, mdata = mdata)
+
+# Посмотрим на структуру собранных данных модели
+first(model_df, 5)
+```
+
+## 3. Комплексная визуализация результатов
+
+Построим комбинированный график, состоящий из трех панелей: численность популяций, динамика температуры и график изменения светимости.
+
+```{julia}
+# Создаем полотно с тремя вертикальными зонами
+figure = CairoMakie.Figure(size = (600, 800))
+
+# Панель 1: Количество маргариток
+ax1 = Axis(figure[1, 1], ylabel = "Кол-во маргариток", title = "Адаптация популяций")
+blackl = lines!(ax1, agent_df[!, :time], agent_df[!, :count_black], color = :black)
+whitel = lines!(ax1, agent_df[!, :time], agent_df[!, :count_white], color = :blue)
+Legend(figure[1, 2], [blackl, whitel], ["Черные", "Белые"])
+
+# Панель 2: Средняя температура
+ax2 = Axis(figure[2, 1], ylabel = "Температура")
+lines!(ax2, model_df[!, :time], model_df[!, :temperature], color = :red)
+
+# Панель 3: Светимость Солнца
+ax3 = Axis(figure[3, 1], xlabel = "Шаги (ticks)", ylabel = "Светимость")
+lines!(ax3, model_df[!, :time], model_df[!, :solar_luminosity], color = :orange)
+
+# Убираем лишние подписи осей для компактности
+for ax in (ax1, ax2); ax.xticklabelsvisible = false; end
+
+figure
+```
+
+## 4. Сохранение и выводы
+
+Сохраняем финальную визуализацию. На графиках должно быть отчетливо видно «плато» температуры — диапазон, в котором маргаритки успешно поддерживают жизнь, несмотря на внешнее воздействие.
+
+```{julia}
+save(plotsdir("daisy_luminosity.png"), figure)
+println("Анализ светимости завершен. График сохранен в plots/daisy_luminosity.png")
+```
